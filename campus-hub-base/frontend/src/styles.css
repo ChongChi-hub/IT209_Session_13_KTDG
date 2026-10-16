@@ -79,6 +79,13 @@ textarea { resize: vertical; line-height: 1.6; }
 .form { display: grid; gap: 16px; }
 .form label { display: grid; gap: 7px; font-size: 14px; font-weight: 600; }
 .form-error { color: #9f2f2f; background: #fff0f0; border-radius: 9px; padding: 10px 12px; margin: 0; }
+.tab-nav { display: flex; gap: 10px; margin-bottom: 20px; }
+.tab-button { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 9px 20px; font-weight: 600; color: #4b5750; transition: all .15s; }
+.tab-button:hover { border-color: var(--green); }
+.tab-button.active { background: var(--green); color: #fff; border-color: var(--green); }
+.bookmark-btn { background: none; border: 0; font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 6px; transition: background .15s; }
+.bookmark-btn:hover { background: #eaf2ed; }
+.bookmark-btn.active { color: var(--green-dark); font-weight: 700; background: #eaf2ed; }
 footer { padding: 24px; text-align: center; color: var(--muted); border-top: 1px solid var(--line); font-size: 13px; }
 
 @media (max-width: 850px) {

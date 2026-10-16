@@ -30,22 +30,35 @@ curl http://localhost:8080/actuator/health
 
 ---
 
-## 3. Cổng và URL kiểm tra Backend
+## 3. Cổng và URL kiểm tra hệ thống
+- **Giao diện Web Frontend (React + Nginx)**: `http://103.72.57.148:3000` (hoặc `http://localhost:3000`)
 - **Cổng Backend**: `8080` (MySQL nội bộ kết nối qua service `mysql:3306`, publish ra host `3308`)
 - **Health check URL**: `http://localhost:8080/actuator/health` (hoặc `http://103.72.57.148:8080/actuator/health` trên VPS)
-- **API bài đăng**: `http://localhost:8080/api/posts`
+- **API bài đăng & Bookmark**: `http://localhost:8080/api/posts`
+- **File báo cáo Word hoàn chỉnh**: [`Bao_cao_Mini_Project_Campus_Hub.docx`](file:///Users/trongtri/Documents/devops/kiem_tra_dau_gio/campus-hub-base/Bao_cao_Mini_Project_Campus_Hub.docx)
 
 ---
 
-## 4. Minh chứng kết quả thực hiện
+## 4. Tính năng mới phát triển (Mini Project)
+- **Tên tính năng**: **Lưu bài viết yêu thích (Bookmarks / Saved Posts)**
+- **Database**: Bổ sung bảng `bookmarks` (khóa ngoại `users`, `posts`, Unique Key, index).
+- **Backend API**:
+  - `POST /api/posts/{id}/bookmark`: Bật / tắt bookmark.
+  - `GET /api/posts/saved`: Lấy danh sách bài viết sinh viên đã lưu.
+- **Frontend UI**: Thêm nút Bookmark `🔖` trên Card và Chi tiết bài viết; thêm Tab điều hướng `Tất cả bài đăng` và `🔖 Bài viết đã lưu`.
+- **Đóng gói toàn diện**: Đóng gói cả Frontend (Nginx Alpine) và Backend (Java 21 JRE) trên Docker Compose.
 
-### 4.1. Gradle Test & Docker Image đã build thành công
+---
+
+## 5. Minh chứng kết quả thực hiện
+
+### 5.1. Gradle Test & Docker Image đã build thành công
 ![Docker Image Build](screenshots/01-docker-build.png)
 
-### 4.2. Trạng thái các service sau khi chạy Compose (`docker compose ps`)
+### 5.2. Trạng thái các service sau khi chạy Compose (`docker compose ps`)
 ![Docker Compose PS](screenshots/02-docker-compose-ps.png)
 
-### 4.3. Kết quả gọi `/actuator/health` trả về UP
+### 5.3. Kết quả gọi `/actuator/health` trả về UP
 ![Actuator Health](screenshots/03-actuator-health.png)
 
 ---

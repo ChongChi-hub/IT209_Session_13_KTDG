@@ -61,4 +61,24 @@ class PostApiIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").isNotEmpty());
     }
+
+    @Test
+    void authenticatedUserCanBookmarkAndQuerySavedPosts() throws Exception {
+        mockMvc.perform(post("/api/posts/1/bookmark")
+                        .with(httpBasic("student", "student123")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bookmarked").value(true));
+
+        mockMvc.perform(get("/api/posts/saved")
+                        .with(httpBasic("student", "student123")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").value(greaterThanOrEqualTo(1)));
+    }
+
+    @Test
+    void anonymousUserCannotBookmark() throws Exception {
+        mockMvc.perform(post("/api/posts/1/bookmark"))
+                .andExpect(status().isUnauthorized());
+    }
 }

@@ -8,6 +8,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vn.edu.ptit.campushub.bookmark.Bookmark;
+import vn.edu.ptit.campushub.bookmark.BookmarkRepository;
 import vn.edu.ptit.campushub.category.Category;
 import vn.edu.ptit.campushub.category.CategoryRepository;
 import vn.edu.ptit.campushub.comment.Comment;
@@ -33,20 +35,34 @@ public class PostService {
     private final UserRepository users;
     private final CommentRepository comments;
     private final ReactionRepository reactions;
+    private final BookmarkRepository bookmarks;
 
     public PostService(PostRepository posts, CategoryRepository categories, UserRepository users,
-                       CommentRepository comments, ReactionRepository reactions) {
+                       CommentRepository comments, ReactionRepository reactions, BookmarkRepository bookmarks) {
         this.posts = posts;
         this.categories = categories;
         this.users = users;
         this.comments = comments;
         this.reactions = reactions;
+        this.bookmarks = bookmarks;
     }
 
     public PageView<PostView> search(String keyword, Long categoryId, int page, int size, Principal principal) {
         int safeSize = Math.min(Math.max(size, 1), 50);
         Page<Post> result = posts.searchPublished(keyword == null ? "" : keyword.trim(), categoryId,
                 PageRequest.of(Math.max(page, 0), safeSize, Sort.by(Sort.Direction.DESC, "createdAt")));
+        List<PostView> content = result.getContent().stream()
+                .map(post -> toView(post, principal, false))
+                .toList();
+        return new PageView<>(content, result.getNumber(), result.getSize(), result.getTotalElements(),
+                result.getTotalPages());
+    }
+
+    public PageView<PostView> getSavedPosts(int page, int size, Principal principal) {
+        User user = currentUser(principal);
+        int safeSize = Math.min(Math.max(size, 1), 50);
+        Page<Post> result = bookmarks.findBookmarkedPostsByUserId(user.getId(),
+                PageRequest.of(Math.max(page, 0), safeSize));
         List<PostView> content = result.getContent().stream()
                 .map(post -> toView(post, principal, false))
                 .toList();
@@ -92,6 +108,7 @@ public class PostService {
         requireOwnerOrAdmin(post, currentUser(principal));
         comments.deleteByPostId(id);
         reactions.deleteByPostId(id);
+        bookmarks.deleteByPostId(id);
         posts.delete(post);
     }
 
@@ -117,6 +134,21 @@ public class PostService {
                 });
     }
 
+    @Transactional
+    public boolean toggleBookmark(Long postId, Principal principal) {
+        Post post = findVisiblePost(postId, principal);
+        User user = currentUser(principal);
+        return bookmarks.findByPostIdAndUserId(postId, user.getId())
+                .map(bookmark -> {
+                    bookmarks.delete(bookmark);
+                    return false;
+                })
+                .orElseGet(() -> {
+                    bookmarks.save(new Bookmark(post, user));
+                    return true;
+                });
+    }
+
     private PostView toView(Post post, Principal principal, boolean includeComments) {
         User current = findCurrentUser(principal);
         List<CommentView> commentViews = includeComments
@@ -126,9 +158,12 @@ public class PostService {
                 new CategoryView(post.getCategory().getId(), post.getCategory().getName(), post.getCategory().getSlug()),
                 new AuthorView(post.getAuthor().getId(), post.getAuthor().getUsername(),
                         post.getAuthor().getDisplayName()),
-                post.getCreatedAt(), post.getUpdatedAt(), reactions.countByPostId(post.getId()),
+                post.getCreatedAt(), post.getUpdatedAt(),
+                reactions.countByPostId(post.getId()),
                 comments.countByPostId(post.getId()),
                 current != null && reactions.findByPostIdAndUserId(post.getId(), current.getId()).isPresent(),
+                bookmarks.countByPostId(post.getId()),
+                current != null && bookmarks.findByPostIdAndUserId(post.getId(), current.getId()).isPresent(),
                 commentViews);
     }
 

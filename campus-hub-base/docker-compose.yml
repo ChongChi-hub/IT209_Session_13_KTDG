@@ -35,5 +35,17 @@ services:
     ports:
       - "8080:8080"
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: campus-hub-frontend:latest
+    container_name: campus-hub-frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
 volumes:
   mysql_data:

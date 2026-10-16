@@ -40,6 +40,13 @@ public class PostController {
         return service.search(keyword, categoryId, page, size, principal);
     }
 
+    @GetMapping("/saved")
+    PageView<PostView> getSavedPosts(@RequestParam(defaultValue = "0") int page,
+                                     @RequestParam(defaultValue = "12") int size,
+                                     Principal principal) {
+        return service.getSavedPosts(page, size, principal);
+    }
+
     @GetMapping("/{id}")
     PostView findOne(@PathVariable Long id, Principal principal) {
         return service.findOne(id, principal);
@@ -78,5 +85,10 @@ public class PostController {
     @PostMapping("/{id}/reaction")
     Map<String, Boolean> toggleReaction(@PathVariable Long id, Principal principal) {
         return Map.of("reacted", service.toggleReaction(id, principal));
+    }
+
+    @PostMapping("/{id}/bookmark")
+    Map<String, Boolean> toggleBookmark(@PathVariable Long id, Principal principal) {
+        return Map.of("bookmarked", service.toggleBookmark(id, principal));
     }
 }

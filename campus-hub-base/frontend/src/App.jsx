@@ -13,20 +13,26 @@ function App() {
   const [posts, setPosts] = useState([])
   const [selectedPost, setSelectedPost] = useState(null)
   const [filters, setFilters] = useState({ keyword: '', categoryId: '' })
+  const [tab, setTab] = useState('all') // 'all' | 'saved'
   const [dialog, setDialog] = useState(null)
   const [notice, setNotice] = useState('')
 
   const loadPosts = useCallback(async () => {
-    const query = new URLSearchParams()
-    if (filters.keyword) query.set('keyword', filters.keyword)
-    if (filters.categoryId) query.set('categoryId', filters.categoryId)
     try {
-      const page = await api(`/posts?${query}`)
-      setPosts(page.content)
+      if (tab === 'saved') {
+        const page = await api('/posts/saved')
+        setPosts(page.content)
+      } else {
+        const query = new URLSearchParams()
+        if (filters.keyword) query.set('keyword', filters.keyword)
+        if (filters.categoryId) query.set('categoryId', filters.categoryId)
+        const page = await api(`/posts?${query}`)
+        setPosts(page.content)
+      }
     } catch (error) {
       setNotice(error.message)
     }
-  }, [filters])
+  }, [filters, tab])
 
   useEffect(() => {
     api('/categories').then(setCategories).catch((error) => setNotice(error.message))
@@ -34,15 +40,26 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const query = new URLSearchParams()
-    if (filters.keyword) query.set('keyword', filters.keyword)
-    if (filters.categoryId) query.set('categoryId', filters.categoryId)
     let active = true
-    api(`/posts?${query}`)
-      .then((page) => { if (active) setPosts(page.content) })
-      .catch((error) => { if (active) setNotice(error.message) })
+    const fetchPosts = async () => {
+      try {
+        if (tab === 'saved') {
+          const page = await api('/posts/saved')
+          if (active) setPosts(page.content)
+        } else {
+          const query = new URLSearchParams()
+          if (filters.keyword) query.set('keyword', filters.keyword)
+          if (filters.categoryId) query.set('categoryId', filters.categoryId)
+          const page = await api(`/posts?${query}`)
+          if (active) setPosts(page.content)
+        }
+      } catch (error) {
+        if (active) setNotice(error.message)
+      }
+    }
+    fetchPosts()
     return () => { active = false }
-  }, [filters])
+  }, [filters, tab])
 
   async function openPost(id) {
     try {
@@ -56,6 +73,7 @@ function App() {
     clearCredentials()
     setUser(null)
     setSelectedPost(null)
+    setTab('all')
     setNotice('Đã đăng xuất')
   }
 
@@ -64,10 +82,28 @@ function App() {
     await loadPosts()
   }
 
+  async function handleToggleBookmark(postId) {
+    if (!user) {
+      setNotice('Vui lòng đăng nhập để lưu bài viết')
+      setDialog('login')
+      return
+    }
+    try {
+      const res = await api(`/posts/${postId}/bookmark`, { method: 'POST' })
+      setNotice(res.bookmarked ? 'Đã lưu bài viết vào mục yêu thích' : 'Đã bỏ lưu bài viết')
+      await loadPosts()
+      if (selectedPost && selectedPost.id === postId) {
+        await openPost(postId)
+      }
+    } catch (error) {
+      setNotice(error.message)
+    }
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
-        <button className="brand" onClick={() => setSelectedPost(null)}>
+        <button className="brand" onClick={() => { setSelectedPost(null); setTab('all') }}>
           <span className="brand-mark">C</span>
           <span>Campus Hub</span>
         </button>
@@ -89,6 +125,7 @@ function App() {
         {selectedPost ? (
           <PostDetail post={selectedPost} user={user} onBack={() => setSelectedPost(null)}
             onChanged={refreshSelected} onDeleted={() => { setSelectedPost(null); loadPosts() }}
+            onBookmark={() => handleToggleBookmark(selectedPost.id)}
             setNotice={setNotice} />
         ) : (
           <>
@@ -101,19 +138,52 @@ function App() {
               <div className="hero-stat"><strong>{posts.length}</strong><span>bài đăng đang hiển thị</span></div>
             </section>
 
-            <section className="filters" aria-label="Tìm kiếm bài đăng">
-              <input value={filters.keyword} placeholder="Tìm theo tiêu đề hoặc nội dung..."
-                onChange={(event) => setFilters({ ...filters, keyword: event.target.value })} />
-              <select value={filters.categoryId}
-                onChange={(event) => setFilters({ ...filters, categoryId: event.target.value })}>
-                <option value="">Tất cả chuyên mục</option>
-                {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-              </select>
-            </section>
+            {user && (
+              <div className="tab-nav">
+                <button
+                  className={`tab-button ${tab === 'all' ? 'active' : ''}`}
+                  onClick={() => setTab('all')}
+                >
+                  Tất cả bài đăng
+                </button>
+                <button
+                  className={`tab-button ${tab === 'saved' ? 'active' : ''}`}
+                  onClick={() => setTab('saved')}
+                >
+                  🔖 Bài viết đã lưu
+                </button>
+              </div>
+            )}
+
+            {tab === 'all' && (
+              <section className="filters" aria-label="Tìm kiếm bài đăng">
+                <input value={filters.keyword} placeholder="Tìm theo tiêu đề hoặc nội dung..."
+                  onChange={(event) => setFilters({ ...filters, keyword: event.target.value })} />
+                <select value={filters.categoryId}
+                  onChange={(event) => setFilters({ ...filters, categoryId: event.target.value })}>
+                  <option value="">Tất cả chuyên mục</option>
+                  {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                </select>
+              </section>
+            )}
 
             <section className="post-grid">
-              {posts.map((post) => <PostCard key={post.id} post={post} onOpen={openPost} />)}
-              {!posts.length && <div className="empty">Chưa có bài đăng phù hợp.</div>}
+              {posts.map((post) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  user={user}
+                  onOpen={openPost}
+                  onBookmark={() => handleToggleBookmark(post.id)}
+                />
+              ))}
+              {!posts.length && (
+                <div className="empty">
+                  {tab === 'saved'
+                    ? 'Bạn chưa lưu bài viết nào. Hãy bấm "Lưu" ở các bài đăng bạn quan tâm.'
+                    : 'Chưa có bài đăng phù hợp.'}
+                </div>
+              )}
             </section>
           </>
         )}
@@ -130,21 +200,38 @@ function App() {
   )
 }
 
-function PostCard({ post, onOpen }) {
+function PostCard({ post, user, onOpen, onBookmark }) {
   return (
     <article className="post-card" onClick={() => onOpen(post.id)}>
-      <div className="card-top"><span className="tag">{post.category.name}</span><span>{formatDate(post.createdAt)}</span></div>
+      <div className="card-top">
+        <span className="tag">{post.category.name}</span>
+        <span>{formatDate(post.createdAt)}</span>
+      </div>
       <h2>{post.title}</h2>
       <p>{post.content}</p>
       <div className="card-footer">
         <span>{post.author.displayName}</span>
-        <span>♥ {post.reactionCount} · {post.commentCount} bình luận</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span>♥ {post.reactionCount} · {post.commentCount} bình luận</span>
+          {user && (
+            <button
+              className={`bookmark-btn ${post.bookmarkedByCurrentUser ? 'active' : ''}`}
+              title={post.bookmarkedByCurrentUser ? 'Bỏ lưu' : 'Lưu bài'}
+              onClick={(e) => {
+                e.stopPropagation()
+                onBookmark()
+              }}
+            >
+              🔖 {post.bookmarkedByCurrentUser ? 'Đã lưu' : 'Lưu'}
+            </button>
+          )}
+        </div>
       </div>
     </article>
   )
 }
 
-function PostDetail({ post, user, onBack, onChanged, onDeleted, setNotice }) {
+function PostDetail({ post, user, onBack, onChanged, onDeleted, onBookmark, setNotice }) {
   const [comment, setComment] = useState('')
   const canManage = user && (user.id === post.author.id || user.role === 'ADMIN')
 
@@ -170,6 +257,10 @@ function PostDetail({ post, user, onBack, onChanged, onDeleted, setNotice }) {
           <button className={`button ${post.reactedByCurrentUser ? 'primary' : 'secondary'}`} disabled={!user}
             onClick={() => act(() => api(`/posts/${post.id}/reaction`, { method: 'POST' }), 'Đã cập nhật quan tâm')}>
             ♥ {post.reactionCount} quan tâm
+          </button>
+          <button className={`button ${post.bookmarkedByCurrentUser ? 'primary' : 'secondary'}`} disabled={!user}
+            onClick={onBookmark}>
+            🔖 {post.bookmarkedByCurrentUser ? 'Đã lưu' : 'Lưu bài'} ({post.bookmarkCount || 0})
           </button>
           {canManage && post.status !== 'RESOLVED' && <button className="button secondary"
             onClick={() => act(() => api(`/posts/${post.id}/status`, {
@@ -220,71 +311,123 @@ function AuthDialog({ onClose, onLogin }) {
 
   async function submit(event) {
     event.preventDefault()
+    setError('')
     try {
       if (mode === 'register') {
-        await api('/auth/register', { method: 'POST', body: JSON.stringify(form) })
+        await api('/auth/register', {
+          method: 'POST',
+          body: JSON.stringify(form),
+        })
       }
       setCredentials(form.username, form.password)
-      onLogin(await api('/auth/me'))
-    } catch (requestError) {
+      const user = await api('/auth/me')
+      onLogin(user)
+    } catch (err) {
       clearCredentials()
-      setError(requestError.message)
+      setError(err.message)
     }
   }
 
-  return <Dialog title={mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'} onClose={onClose}>
-    <form className="form" onSubmit={submit}>
-      {error && <p className="form-error">{error}</p>}
-      <label>Tên đăng nhập<input required minLength="3" value={form.username}
-        onChange={(event) => setForm({ ...form, username: event.target.value })} /></label>
-      {mode === 'register' && <label>Tên hiển thị<input required value={form.displayName}
-        onChange={(event) => setForm({ ...form, displayName: event.target.value })} /></label>}
-      <label>Mật khẩu<input required minLength="6" type="password" value={form.password}
-        onChange={(event) => setForm({ ...form, password: event.target.value })} /></label>
-      <button className="button primary">{mode === 'login' ? 'Đăng nhập' : 'Đăng ký'}</button>
-      <button type="button" className="text-button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}>
-        {mode === 'login' ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập'}
-      </button>
-    </form>
-  </Dialog>
+  return (
+    <div className="dialog-backdrop" onClick={onClose}>
+      <div className="dialog" onClick={(event) => event.stopPropagation()}>
+        <div className="dialog-top">
+          <h2>{mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}</h2>
+          <button className="icon-button" onClick={onClose}>×</button>
+        </div>
+        <form className="form" onSubmit={submit}>
+          {error && <p className="form-error">{error}</p>}
+          <label>
+            <span>Tên đăng nhập</span>
+            <input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })}
+              required minLength="3" maxLength="60" />
+          </label>
+          {mode === 'register' && (
+            <label>
+              <span>Tên hiển thị</span>
+              <input value={form.displayName}
+                onChange={(event) => setForm({ ...form, displayName: event.target.value })}
+                required minLength="2" maxLength="100" />
+            </label>
+          )}
+          <label>
+            <span>Mật khẩu</span>
+            <input type="password" value={form.password}
+              onChange={(event) => setForm({ ...form, password: event.target.value })}
+              required minLength="6" maxLength="100" />
+          </label>
+          <button className="button primary">{mode === 'login' ? 'Đăng nhập' : 'Đăng ký'}</button>
+          <div className="dialog-switch">
+            {mode === 'login' ? (
+              <p>Chưa có tài khoản? <button type="button" className="text-button"
+                onClick={() => { setMode('register'); setError('') }}>Đăng ký ngay</button></p>
+            ) : (
+              <p>Đã có tài khoản? <button type="button" className="text-button"
+                onClick={() => { setMode('login'); setError('') }}>Đăng nhập</button></p>
+            )}
+          </div>
+        </form>
+      </div>
+    </div>
+  )
 }
 
 function PostDialog({ categories, onClose, onSaved }) {
   const [form, setForm] = useState(emptyPost)
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
   async function submit(event) {
     event.preventDefault()
+    setError('')
+    setSaving(true)
     try {
-      await api('/posts', { method: 'POST', body: JSON.stringify({ ...form, categoryId: Number(form.categoryId) }) })
+      await api('/posts', {
+        method: 'POST',
+        body: JSON.stringify({ ...form, categoryId: Number(form.categoryId) }),
+      })
       onSaved()
-    } catch (requestError) {
-      setError(requestError.message)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
     }
   }
-  return <Dialog title="Tạo bài đăng" onClose={onClose}>
-    <form className="form" onSubmit={submit}>
-      {error && <p className="form-error">{error}</p>}
-      <label>Tiêu đề<input required maxLength="160" value={form.title}
-        onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
-      <label>Chuyên mục<select required value={form.categoryId}
-        onChange={(event) => setForm({ ...form, categoryId: event.target.value })}>
-        <option value="">Chọn chuyên mục</option>
-        {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-      </select></label>
-      <label>Nội dung<textarea required maxLength="10000" rows="7" value={form.content}
-        onChange={(event) => setForm({ ...form, content: event.target.value })} /></label>
-      <button className="button primary">Đăng bài</button>
-    </form>
-  </Dialog>
-}
 
-function Dialog({ title, onClose, children }) {
-  return <div className="dialog-backdrop" onMouseDown={onClose}>
-    <section className="dialog" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
-      <div className="dialog-title"><h2>{title}</h2><button onClick={onClose} aria-label="Đóng">×</button></div>
-      {children}
-    </section>
-  </div>
+  return (
+    <div className="dialog-backdrop" onClick={onClose}>
+      <div className="dialog" onClick={(event) => event.stopPropagation()}>
+        <div className="dialog-top">
+          <h2>Tạo bài đăng mới</h2>
+          <button className="icon-button" onClick={onClose}>×</button>
+        </div>
+        <form className="form" onSubmit={submit}>
+          {error && <p className="form-error">{error}</p>}
+          <label>
+            <span>Chuyên mục</span>
+            <select value={form.categoryId}
+              onChange={(event) => setForm({ ...form, categoryId: event.target.value })} required>
+              <option value="">Chọn một chuyên mục</option>
+              {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Tiêu đề</span>
+            <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })}
+              placeholder="Tóm tắt ngắn gọn điều bạn muốn chia sẻ" required maxLength="160" />
+          </label>
+          <label>
+            <span>Nội dung</span>
+            <textarea value={form.content} rows="6"
+              onChange={(event) => setForm({ ...form, content: event.target.value })}
+              placeholder="Mô tả chi tiết nội dung cần thông báo, hỏi hoặc trao đổi..." required
+              maxLength="10000" />
+          </label>
+          <button className="button primary" disabled={saving}>{saving ? 'Đang lưu...' : 'Đăng bài'}</button>
+        </form>
+      </div>
+    </div>
+  )
 }
 
 export default App
